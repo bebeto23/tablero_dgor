@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>DEMO – Tablero gerencial de alertas de deforestación | INFONA</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<script>
+/* =====================================================================
+   CONFIGURACIÓN — editar solo este bloque
+   ===================================================================== */
+const CONFIG = {
+  // Archivo CSV publicado en el mismo repositorio (se reemplaza una vez al mes)
+  csvUrl: "alertas.csv",
+  // Nombres de columna del CSV (exportado de la capa DGOR_REPORTES)
+  fields: {
+    anio: "año", dpto: "dpto", distrito: "distrito", oficina: "oficina_re",
+    tipo: "tipo_de_in", atendido: "atendido", remitido: "remitido_a",
+    superficie: "superficie", fecha: "fecha_ai", reporte: "reporte_nr",
+    acta: "acta_n_", estado: "estado_ofi", notificado: "notificado",
+    obs: "observaci", obs2: "observac_1", denunciado: "denunciado",
+    sumariado: "sumariado", oficio: "oficio_nro", fechaActa: "fecha_acta",
+    plazo45: "fecha_45_d", plazo90: "fecha_90_d", lon: "point_x", lat: "point_y"
+  }
+};
+</script>
+<style>
+:root{--bg:#f2f4f1;--card:#fff;--ink:#1d2a22;--muted:#5f6d64;--line:#dfe5df;--brand:#2f7d1f;--brand2:#3aa30a;--ok:#2f7d1f;--pen:#d9822b;--chip:#e8efe6;--hov:#eef5ec;--sel:#1f5a8a;
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#151a16;--card:#1e2520;--ink:#e5ece6;--muted:#9aa89e;--line:#323d35;--brand:#5fae4a;--brand2:#3e8a28;--ok:#5fae84;--pen:#f0a050;--chip:#28322b;--hov:#253027;--sel:#6aa3cf}}
+:root[data-theme="dark"]{--bg:#151a16;--card:#1e2520;--ink:#e5ece6;--muted:#9aa89e;--line:#323d35;--brand:#5fae4a;--brand2:#3e8a28;--ok:#5fae84;--pen:#f0a050;--chip:#28322b;--hov:#253027;--sel:#6aa3cf}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}*,*::before,*::after{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:13px/1.4 "Segoe UI",Avenir,"Helvetica Neue",Arial,sans-serif}
+.demo{background:#1d2a22;color:#ffe08a;text-align:center;font-size:.75rem;padding:4px 10px;letter-spacing:.2px}
+header{background:var(--brand2);color:#fff;padding:10px 16px;display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px}
+header h1{font-size:1.15rem;margin:0;font-weight:600}header small{display:block;opacity:.9;font-size:.78rem}
+header .sp{flex:1}
+.btn{border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:6px;padding:6px 12px;font:inherit;cursor:pointer}
+.btn:hover{background:var(--hov)}.btn.p{background:var(--brand);border-color:var(--brand);color:#fff}
+header .btn{background:rgba(255,255,255,.15);border-color:rgba(255,255,255,.5);color:#fff}
+#st{font-size:.75rem;opacity:.95}
+main{padding:12px;max-width:1600px;margin:0 auto}
+.fl{background:var(--card);padding:10px 12px;display:flex;flex-wrap:wrap;gap:10px 14px;align-items:flex-end;margin-bottom:10px}
+.fl label{display:flex;flex-direction:column;gap:3px;font-size:.72rem;color:var(--muted)}
+.fl select,.fl input{font:inherit;color:var(--ink);background:var(--card);border:1px solid var(--line);border-radius:5px;padding:5px 6px;min-width:150px}
+.yr{display:flex;gap:4px;flex-wrap:wrap}
+.yr button{border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:14px;padding:4px 10px;font:inherit;font-size:.78rem;cursor:pointer}
+.yr button[aria-pressed=true]{background:var(--brand);border-color:var(--brand);color:#fff}
+.kp{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-bottom:10px}
+.k{background:var(--card);padding:10px 12px;border-top:3px solid var(--brand)}
+.k b{display:block;font-size:1.45rem;font-variant-numeric:tabular-nums}.k small{color:var(--muted)}.k.w{border-color:var(--pen)}
+.g1{display:grid;grid-template-columns:1.6fr 1fr;gap:10px;margin-bottom:10px}
+.g2{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:10px}
+.cd{background:var(--card);padding:10px 12px;min-width:0}
+h2{font-size:.88rem;margin:0 0 2px}.h{color:var(--muted);font-size:.72rem;margin:0 0 8px}
+#map{height:420px;border:1px solid var(--line)}
+#card{min-height:420px;overflow:auto}
+#card dl{display:grid;grid-template-columns:130px 1fr;gap:4px 10px;margin:0}
+#card dt{color:var(--muted);font-size:.75rem}#card dd{margin:0;word-break:break-word}
+.vb{display:flex;align-items:flex-end;gap:10px;height:170px;padding-top:14px}
+.vc{flex:1;display:flex;flex-direction:column;align-items:center;height:100%;cursor:pointer;border-radius:3px}
+.vc:hover{background:var(--hov)}.vc.on{outline:2px solid var(--brand)}
+.vs{flex:1;width:60%;display:flex;flex-direction:column;justify-content:flex-end}.vs div{width:100%}
+.vt{font-weight:700;font-size:.78rem}.vl{font-size:.75rem;color:var(--muted);margin-top:3px}
+.hr{display:grid;grid-template-columns:130px 1fr 44px 40px;align-items:center;gap:6px;padding:2px 3px;cursor:pointer;border-radius:3px}
+.hr:hover{background:var(--hov)}.hr.on{outline:2px solid var(--brand)}
+.hr .n{text-align:right;font-weight:700;font-variant-numeric:tabular-nums}.hr .p{text-align:right;color:var(--muted);font-size:.72rem}
+.hr .nm{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bar{display:flex;height:12px;background:var(--chip);border-radius:2px;overflow:hidden}
+.lg{display:flex;gap:10px;font-size:.72rem;color:var(--muted);margin-bottom:6px}.lg i{display:inline-block;width:9px;height:9px;margin-right:4px;vertical-align:-1px}
+.scr{max-height:300px;overflow:auto}
+.tw{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:.8rem}
+th,td{padding:5px 6px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap}
+th{position:sticky;top:0;background:var(--card);color:var(--muted);font-weight:600}
+tbody tr{cursor:pointer}tbody tr:hover{background:var(--hov)}tbody tr.on{background:var(--chip)}
+.pg{display:flex;gap:8px;align-items:center;justify-content:flex-end;margin-top:6px;color:var(--muted);font-size:.78rem}
+.pill{display:inline-block;padding:1px 8px;border-radius:10px;font-size:.72rem;color:#fff}
+.pill.si{background:var(--ok)}.pill.no{background:var(--pen)}
+#ov{position:fixed;inset:0;background:rgba(0,0,0,.45);display:none;align-items:center;justify-content:center;z-index:50}
+#ov .box{background:var(--card);padding:20px 24px;max-width:460px;border-radius:8px}
+.nt{color:var(--muted);font-size:.72rem;margin:8px 2px 0}
+.mlg{background:rgba(255,255,255,.92);color:#1d2a22;padding:5px 9px;border-radius:5px;font-size:.75rem;box-shadow:0 1px 4px rgba(0,0,0,.25);display:flex;gap:10px}
+.mlg i{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:4px;vertical-align:-1px;border:1.5px solid #fff;box-shadow:0 0 0 1px rgba(0,0,0,.2)}
+.leaflet-control-layers{font:inherit;font-size:.8rem}
+@media (max-width:1100px){.g1,.g2{grid-template-columns:1fr}.kp{grid-template-columns:repeat(2,1fr)}}
+</style>
+</head>
+<body>
+<div class="demo">VERSIÓN DE DEMOSTRACIÓN · Datos reales de la DGOR publicados sin información personal y con coordenadas aproximadas (~1 km). Para implementar en los servidores del INFONA.</div>
+<header>
+  <div><h1>Alertas de deforestación – Tablero gerencial</h1><small>Dirección General de Oficinas Regionales · INFONA</small></div>
+  <div class="sp"></div>
+  <span id="st">Cargando…</span>
+  <button class="btn" id="bRef" title="Volver a leer los datos publicados">⟳ Recargar</button>
+</header>
+<main>
+  <div class="fl">
+    <label>Año<div class="yr" id="fYr"></div></label>
+    <label>Oficina regional<select id="fOf"></select></label>
+    <label>Departamento<select id="fDp"></select></label>
+    <label>Tipo<select id="fTi"></select></label>
+    <label>Atendido<select id="fAt"><option value="">Todos</option><option>SI</option><option>NO</option></select></label>
+    <label>Buscar (reporte, distrito, acta)<input id="fQ" type="search" placeholder="Ej.: 1520"></label>
+    <button class="btn" id="bClr">Limpiar filtros</button>
+    <div class="sp" style="flex:1"></div>
+    <button class="btn p" id="bXls">⬇ Excel (filtrado)</button>
+    <button class="btn p" id="bPdf">⬇ PDF (filtrado)</button>
+  </div>
+
+  <div class="kp">
+    <div class="k"><b id="k1">–</b><small>alertas</small></div>
+    <div class="k"><b id="k2">–</b><small>atendidas</small></div>
+    <div class="k w"><b id="k3">–</b><small>pendientes</small></div>
+    <div class="k"><b id="k4">–</b><small>superficie registrada (ha)</small></div>
+    <div class="k"><b id="k5">–</b><small>oficinas regionales con alertas</small></div>
+  </div>
+
+  <div class="g1">
+    <div class="cd"><h2>Visualización de puntos de alerta</h2><p class="h">Clic en un punto para ver la tarjeta · Cambiá el mapa base con el ícono de capas (arriba a la derecha).</p><div id="map"></div><p id="mapNote" class="h" style="display:none;margin:6px 0 0"></p></div>
+    <div class="cd" id="card"><h2>Tarjeta de la alerta</h2><p class="h">Seleccioná una alerta en el mapa o en la tabla.</p><div id="cardB"></div></div>
+  </div>
+
+  <div class="g2">
+    <div class="cd"><h2>Alertas por año</h2><p class="h">Clic para filtrar</p>
+      <div class="lg"><span><i style="background:var(--ok)"></i>Atendidas</span><span><i style="background:var(--pen)"></i>Pendientes</span></div><div class="vb" id="cY"></div></div>
+    <div class="cd"><h2>Por oficina regional</h2><p class="h">Clic para filtrar · % atendidas</p><div class="scr" id="cO"></div></div>
+    <div class="cd"><h2>Por tipo</h2><p class="h">Clic para filtrar · % del total</p><div class="scr" id="cT"></div></div>
+  </div>
+
+  <div class="cd"><h2>Detalles de alerta</h2><p class="h" id="tInfo"></p>
+    <div class="tw"><table><thead><tr><th>Reporte</th><th>Año</th><th>Oficina regional</th><th>Departamento</th><th>Distrito</th><th>Tipo</th><th>Atendido</th><th>Sup. (ha)</th><th>Acta</th></tr></thead><tbody id="tb"></tbody></table></div>
+    <div class="pg"><button class="btn" id="pPrev">‹</button><span id="pInf"></span><button class="btn" id="pNext">›</button></div>
+  </div>
+  <p class="nt">Demostración elaborada a partir de la capa de alertas de la DGOR (DGOR_REPORTES). Se excluyeron denunciados, sumariados, observaciones, actas y oficios; las coordenadas están redondeadas a ~1 km. La versión institucional se conecta en vivo a la capa con inicio de sesión del portal del INFONA. Las descargas Excel y PDF incluyen únicamente los registros que cumplen los filtros activos. Documento de uso interno.</p>
+</main>
+<div id="ov"><div class="box"><h2 id="ovT">Sin datos</h2><p id="ovM"></p><button class="btn" id="ovX">Cerrar</button></div></div>
+
+<script>
+"use strict";
+const F = CONFIG.fields;
+let ALL = [], VIEW = [], sel = null, page = 0, timer = null, mapApi = null;
+const S = { y: null, of: "", dp: "", ti: "", at: "", q: "" };
+const PAGE = 50;
+const $ = id => document.getElementById(id);
+const fmt = n => Math.round(n).toLocaleString("es-PY");
+const pc = (a, b) => b ? Math.round(a / b * 100) + " %" : "–";
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+/* ---------- normalización ---------- */
+const DPTOS = ["Alto Paraguay","Presidente Hayes","Boquerón","San Pedro","Canindeyú","Concepción","Caaguazú","Amambay","Caazapá","Itapúa","Guairá","Alto Paraná","Paraguarí","Cordillera","Central","Misiones","Ñeembucú","Asunción"];
+const plain = s => String(s ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().trim();
+const DMAP = Object.fromEntries(DPTOS.map(d => [plain(d), d]));
+function normDpto(v) { const p = plain(v); if (!p) return "Sin dato"; if (/[\/\-]/.test(p) && !DMAP[p]) return "Varios"; return DMAP[p] || (p.charAt(0) + p.slice(1).toLowerCase()); }
+const TMAP = { "INTERVENCION": "Intervención", "SOLICITUD DE ALLANAMIENTO": "Solicitud de allanamiento", "FISCALIZACION": "Fiscalización", "OTROS": "Otros", "R. DEVUELTOS": "Reportes devueltos" };
+function normTipo(v) { const p = plain(v); return p ? (TMAP[p] || v.trim()) : "Sin registro"; }
+function normOf(v) { const p = String(v ?? "").trim(); return p ? p.replace(/_/g, " ").toUpperCase() : "SIN DATO"; }
+function toDate(v) { if (v == null || v === "") return ""; if (typeof v === "number") return new Date(v).toLocaleDateString("es-PY"); return String(v).trim().split(/[ T]/)[0]; }
+
+function toRecord(a, lon, lat) {
+  const g = k => a[F[k]];
+  return {
+    reporte: g("reporte") ?? "", anio: Number(g("anio")) || null, dpto: normDpto(g("dpto")), distrito: String(g("distrito") ?? "").trim(),
+    oficina: normOf(g("oficina")), tipo: normTipo(g("tipo")), atendido: plain(g("atendido")) === "SI" ? "SI" : "NO",
+    remitido: String(g("remitido") ?? "").replace(/\s+/g, " ").trim(), superficie: Number(g("superficie")) || 0,
+    fecha: toDate(g("fecha")), acta: String(g("acta") ?? "").trim(), estado: String(g("estado") ?? "").trim(),
+    notificado: String(g("notificado") ?? "").trim(), obs: [g("obs"), g("obs2")].filter(x => x && String(x).trim()).join(" · "),
+    denunciado: String(g("denunciado") ?? "").trim(), sumariado: String(g("sumariado") ?? "").trim(), oficio: String(g("oficio") ?? "").trim(), fechaActa: toDate(g("fechaActa")), plazo45: toDate(g("plazo45")), plazo90: toDate(g("plazo90")),
+    lon: Number(lon), lat: Number(lat)
+  };
+}
+
+/* ---------- carga del CSV ---------- */
+function ingest(rows, label) {
+  ALL = rows.map(a => toRecord(a, a[F.lon] ?? a.x, a[F.lat] ?? a.y));
+  const last = ALL.map(r => r.fecha).filter(Boolean).map(s => { const p = s.split(/[\/\-]/); return p[0].length === 4 ? new Date(+p[0], p[1] - 1, +p[2]) : new Date(+p[2], p[1] - 1, +p[0]); }).filter(d => !isNaN(d)).sort((a, b) => b - a)[0];
+  $("st").textContent = label + " · " + fmt(ALL.length) + " registros" + (last ? " · último registro: " + last.toLocaleDateString("es-PY") : "");
+  $("ov").style.display = "none"; buildFilters(); apply();
+}
+function refresh() {
+  $("st").textContent = "Cargando datos…";
+  Papa.parse(CONFIG.csvUrl + "?v=" + Date.now(), { download: true, header: true, skipEmptyLines: true,
+    complete: res => { if (!res.data.length) return fail("el archivo está vacío"); ingest(res.data, "Datos de demostración"); },
+    error: e => fail(e && e.message || "no se encontró " + CONFIG.csvUrl) });
+}
+function fail(msg) {
+  $("st").textContent = "Sin datos publicados";
+  $("ovT").textContent = "No se pudieron cargar los datos";
+  $("ovM").textContent = "No se pudo leer el archivo de datos (" + msg + "). Verificá que alertas.csv esté en la misma carpeta que esta página.";
+  $("ov").style.display = "flex";
+}
+
+/* ---------- filtros ---------- */
+function fillSel(id, vals, cur) {
+  const el = $(id); el.innerHTML = '<option value="">Todos</option>' + vals.map(v => `<option${v === cur ? " selected" : ""}>${esc(v)}</option>`).join("");
+}
+function buildFilters() {
+  const uniq = k => [...new Set(ALL.map(r => r[k]))].filter(Boolean).sort((a, b) => String(a).localeCompare(String(b), "es"));
+  const years = uniq("anio").sort();
+  $("fYr").innerHTML = ['<button data-y="">Todos</button>'].concat(years.map(y => `<button data-y="${y}">${y}</button>`)).join("");
+  $("fYr").querySelectorAll("button").forEach(b => b.onclick = () => { S.y = b.dataset.y ? +b.dataset.y : null; apply(); });
+  fillSel("fOf", uniq("oficina"), S.of); fillSel("fDp", uniq("dpto"), S.dp); fillSel("fTi", uniq("tipo"), S.ti);
+}
+function match(r, skip) {
+  if (skip !== "y" && S.y !== null && r.anio !== S.y) return false;
+  if (skip !== "of" && S.of && r.oficina !== S.of) return false;
+  if (S.dp && r.dpto !== S.dp) return false;
+  if (skip !== "ti" && S.ti && r.tipo !== S.ti) return false;
+  if (S.at && r.atendido !== S.at) return false;
+  if (S.q) { const q = plain(S.q); if (![r.reporte, r.distrito, r.acta, r.dpto].some(v => plain(v).includes(q))) return false; }
+  return true;
+}
+function filterText() {
+  const t = []; if (S.y !== null) t.push("Año " + S.y); if (S.of) t.push("Oficina " + S.of); if (S.dp) t.push(S.dp);
+  if (S.ti) t.push(S.ti); if (S.at) t.push("Atendido: " + S.at); if (S.q) t.push('Búsqueda "' + S.q + '"');
+  return t.length ? t.join(" · ") : "Sin filtros (todas las alertas)";
+}
+
+/* ---------- render ---------- */
+function apply() {
+  page = 0; VIEW = ALL.filter(r => match(r));
+  $("fYr").querySelectorAll("button").forEach(b => b.setAttribute("aria-pressed", String((b.dataset.y || null) == (S.y === null ? null : String(S.y)))));
+  $("fOf").value = S.of; $("fDp").value = S.dp; $("fTi").value = S.ti; $("fAt").value = S.at;
+  const n = VIEW.length, a = VIEW.filter(r => r.atendido === "SI").length;
+  $("k1").textContent = fmt(n); $("k2").textContent = pc(a, n); $("k3").textContent = fmt(n - a);
+  $("k4").textContent = fmt(VIEW.reduce((s, r) => s + r.superficie, 0)); $("k5").textContent = new Set(VIEW.map(r => r.oficina)).size;
+  drawYears(); drawBars("cO", "oficina", "of", true); drawBars("cT", "tipo", "ti", false); drawTable(); drawMap();
+  if (sel && !VIEW.includes(sel)) showCard(null);
+}
+function grp(rows, k) { const m = new Map(); rows.forEach(r => { const g = m.get(r[k]) || { n: 0, a: 0 }; g.n++; if (r.atendido === "SI") g.a++; m.set(r[k], g); }); return [...m].sort((x, y) => y[1].n - x[1].n); }
+function drawYears() {
+  const G = new Map(grp(ALL.filter(r => match(r, "y")), "anio")); const ys = [...new Set(ALL.map(r => r.anio))].filter(Boolean).sort();
+  const mx = Math.max(1, ...ys.map(y => (G.get(y) || { n: 0 }).n));
+  $("cY").innerHTML = ys.map(y => { const g = G.get(y) || { n: 0, a: 0 }, h = g.n / mx * 100;
+    return `<div class="vc${S.y === y ? " on" : ""}" data-y="${y}" title="${y}: ${fmt(g.n)} alertas, ${pc(g.a, g.n)} atendidas"><div class="vt">${fmt(g.n)}</div><div class="vs"><div style="height:${h * (g.n - g.a) / (g.n || 1)}%;background:var(--pen)"></div><div style="height:${h * g.a / (g.n || 1)}%;background:var(--ok)"></div></div><div class="vl">${y}</div></div>`; }).join("");
+  $("cY").querySelectorAll(".vc").forEach(e => e.onclick = () => { const y = +e.dataset.y; S.y = S.y === y ? null : y; apply(); });
+}
+function drawBars(el, k, key, att) {
+  const rows = ALL.filter(r => match(r, key)), D = grp(rows, k), tot = rows.length, mx = Math.max(1, ...D.map(x => x[1].n));
+  $(el).innerHTML = D.map(([v, g]) => `<div class="hr${S[key] === v ? " on" : ""}" data-v="${esc(v)}" title="${esc(v)}: ${fmt(g.n)}"><span class="nm">${esc(v)}</span><div class="bar" style="width:${g.n / mx * 100}%">${att ? `<div style="width:${g.a / g.n * 100}%;background:var(--ok)"></div><div style="flex:1;background:var(--pen)"></div>` : `<div style="flex:1;background:var(--sel)"></div>`}</div><span class="n">${fmt(g.n)}</span><span class="p">${att ? pc(g.a, g.n) : pc(g.n, tot)}</span></div>`).join("") || "<p class='h'>Sin datos</p>";
+  $(el).querySelectorAll(".hr").forEach(e => e.onclick = () => { const v = e.dataset.v; S[key] = S[key] === v ? "" : v; apply(); });
+}
+function drawTable() {
+  const rows = VIEW.slice(page * PAGE, page * PAGE + PAGE);
+  $("tb").innerHTML = rows.map((r, i) => `<tr data-i="${page * PAGE + i}"${r === sel ? ' class="on"' : ""}><td>${esc(r.reporte)}</td><td>${r.anio ?? ""}</td><td>${esc(r.oficina)}</td><td>${esc(r.dpto)}</td><td>${esc(r.distrito)}</td><td>${esc(r.tipo)}</td><td><span class="pill ${r.atendido === "SI" ? "si" : "no"}">${r.atendido}</span></td><td>${r.superficie ? fmt(r.superficie) : ""}</td><td>${esc(r.acta)}</td></tr>`).join("") || '<tr><td colspan="9">Sin registros para los filtros seleccionados.</td></tr>';
+  $("tb").querySelectorAll("tr[data-i]").forEach(tr => tr.onclick = () => { showCard(VIEW[+tr.dataset.i]); });
+  const pages = Math.max(1, Math.ceil(VIEW.length / PAGE));
+  $("pInf").textContent = `Página ${page + 1} de ${pages}`; $("tInfo").textContent = fmt(VIEW.length) + " registros · " + filterText();
+}
+function showCard(r) {
+  sel = r;
+  if (!r) { $("cardB").innerHTML = ""; drawTable(); return; }
+  const it = [["Reporte N°", r.reporte], ["Año", r.anio], ["Fecha", r.fecha], ["Oficina regional", r.oficina], ["Departamento", r.dpto], ["Distrito", r.distrito], ["Tipo", r.tipo], ["Atendido", r.atendido], ["Remitido a", r.remitido], ["Superficie (ha)", r.superficie ? fmt(r.superficie) : ""], ["Acta", r.acta], ["Fecha del acta", r.fechaActa], ["Plazo 45 días", r.plazo45], ["Plazo 90 días", r.plazo90], ["Oficio", r.oficio], ["Estado oficio", r.estado], ["Notificado", r.notificado], ["Denunciado", r.denunciado], ["Sumariado", r.sumariado], ["Observaciones", r.obs], ["Coordenadas", isFinite(r.lat) && r.lat ? r.lat.toFixed(5) + ", " + r.lon.toFixed(5) : "Sin coordenadas"]];
+  $("cardB").innerHTML = "<dl>" + it.filter(x => x[1] !== "" && x[1] != null).map(([k, v]) => `<dt>${k}</dt><dd>${esc(v)}</dd>`).join("") + "</dl>";
+  drawTable(); if (mapApi && isFinite(r.lat) && r.lat) mapApi.goTo(r);
+}
+
+/* ---------- mapa (Leaflet + OpenStreetMap, sin ArcGIS) ---------- */
+function initMap() {
+  if (typeof L === "undefined") { $("map").innerHTML = "<p class='h' style='padding:10px'>Mapa no disponible sin conexión.</p>"; return; }
+  const map = L.map("map", { preferCanvas: true }).setView([-23.4, -58.4], 6);
+  const base = {
+    "Claro (Voyager)": L.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png", { maxZoom: 19, subdomains: "abcd", attribution: "© OpenStreetMap · © CARTO" }),
+    "Gris (Positron)": L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", { maxZoom: 19, subdomains: "abcd", attribution: "© OpenStreetMap · © CARTO" }),
+    "Oscuro": L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", { maxZoom: 19, subdomains: "abcd", attribution: "© OpenStreetMap · © CARTO" }),
+    "Satélite": L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", { maxZoom: 18, attribution: "Imágenes © Esri, Maxar, Earthstar Geographics" }),
+    "Topográfico": L.tileLayer("https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png", { maxZoom: 17, attribution: "© OpenStreetMap · © OpenTopoMap (CC-BY-SA)" }),
+    "OpenStreetMap": L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19, attribution: "© OpenStreetMap" })
+  };
+  // Si un mapa base no carga (servidor bloqueado o vista previa local), se pasa al siguiente automáticamente
+  const order = Object.keys(base); let errs = 0, okTiles = 0, cur = "Claro (Voyager)";
+  Object.entries(base).forEach(([name, lyr]) => {
+    lyr.options.referrerPolicy = "strict-origin-when-cross-origin";
+    lyr.on("tileload", () => { if (name === cur) okTiles++; });
+    lyr.on("tileerror", () => {
+      if (name !== cur || okTiles > 0) return;
+      if (++errs < 4) return;
+      const next = order[(order.indexOf(name) + 1) % order.length];
+      if (next === "Claro (Voyager)") { note("No se pudo cargar ningún mapa base. Revisá la conexión a internet."); return; }
+      errs = 0; map.removeLayer(lyr); base[next].addTo(map); cur = next;
+      note("El mapa base \u201c" + name + "\u201d no respondió; se usa \u201c" + next + "\u201d.");
+    });
+  });
+  const note = msg => { const n = document.getElementById("mapNote"); if (n) { n.textContent = msg; n.style.display = "block"; } };
+  base["Claro (Voyager)"].addTo(map);
+  // Etiquetas de ciudades y rutas sobre el satélite
+  const labels = L.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager_only_labels/{z}/{x}/{y}{r}.png", { maxZoom: 19, subdomains: "abcd", pane: "shadowPane" });
+  map.on("baselayerchange", e => { cur = e.name; errs = 0; okTiles = 0; if (e.name === "Satélite") labels.addTo(map); else map.removeLayer(labels); });
+  L.control.layers(base, null, { position: "topright", collapsed: true }).addTo(map);
+  L.control.scale({ imperial: false, position: "bottomleft" }).addTo(map);
+  const grp = L.layerGroup().addTo(map);
+  const lg = L.control({ position: "bottomright" });
+  lg.onAdd = () => { const d = L.DomUtil.create("div", "mlg"); d.innerHTML = '<span><i style="background:#2f9e44"></i>Atendida</span><span><i style="background:#f08c00"></i>Pendiente</span>'; return d; };
+  lg.addTo(map);
+  mapApi = {
+    draw(rows) { grp.clearLayers(); rows.forEach(r => { if (!(isFinite(r.lat) && r.lat && r.lon)) return;
+      L.circleMarker([r.lat, r.lon], { radius: 6, weight: 1.5, color: "#ffffff", opacity: 1, fillOpacity: .92, fillColor: r.atendido === "SI" ? "#2f9e44" : "#f08c00" })
+        .on("click", () => showCard(r)).addTo(grp); }); },
+    goTo(r) { map.setView([r.lat, r.lon], 12); }
+  };
+  drawMap();
+}
+function drawMap() { if (mapApi) mapApi.draw(VIEW); }
+
+/* ---------- exportación (respeta los filtros) ---------- */
+const COLS = [["reporte", "Reporte N°"], ["anio", "Año"], ["fecha", "Fecha"], ["oficina", "Oficina regional"], ["dpto", "Departamento"], ["distrito", "Distrito"], ["tipo", "Tipo"], ["atendido", "Atendido"], ["remitido", "Remitido a"], ["superficie", "Superficie (ha)"], ["acta", "Acta"], ["fechaActa", "Fecha del acta"], ["plazo45", "Plazo 45 días"], ["plazo90", "Plazo 90 días"], ["oficio", "Oficio"], ["estado", "Estado oficio"], ["notificado", "Notificado"], ["denunciado", "Denunciado"], ["sumariado", "Sumariado"], ["obs", "Observaciones"], ["lat", "Latitud"], ["lon", "Longitud"]];
+const stamp = () => new Date().toISOString().slice(0, 10);
+function exportXlsx() {
+  if (!VIEW.length) return alert("No hay registros para los filtros seleccionados.");
+  const C = COLS.filter(([k]) => VIEW.some(r => r[k] !== "" && r[k] != null && !(typeof r[k] === "number" && isNaN(r[k]))));
+  const rows = VIEW.map(r => Object.fromEntries(C.map(([k, l]) => [l, r[k] ?? ""])));
+  const a = VIEW.filter(r => r.atendido === "SI").length;
+  const res = [["INFONA – Dirección General de Oficinas Regionales"], ["Reporte de alertas de deforestación"], [], ["Generado", new Date().toLocaleString("es-PY")], ["Filtros", filterText()], [], ["Alertas", VIEW.length], ["Atendidas", a], ["Pendientes", VIEW.length - a], ["% atendidas", VIEW.length ? +(a / VIEW.length * 100).toFixed(1) : 0], ["Superficie registrada (ha)", +VIEW.reduce((s, r) => s + r.superficie, 0).toFixed(2)], [], ["Oficina regional", "Alertas", "Atendidas", "% atendidas"]]
+    .concat(grp(VIEW, "oficina").map(([o, g]) => [o, g.n, g.a, +(g.a / g.n * 100).toFixed(1)]));
+  const wb = XLSX.utils.book_new();
+  const ws1 = XLSX.utils.aoa_to_sheet(res); ws1["!cols"] = [{ wch: 28 }, { wch: 40 }, { wch: 12 }, { wch: 12 }];
+  const ws2 = XLSX.utils.json_to_sheet(rows); ws2["!cols"] = C.map(([, l]) => ({ wch: Math.max(10, l.length + 2) }));
+  XLSX.utils.book_append_sheet(wb, ws1, "Resumen"); XLSX.utils.book_append_sheet(wb, ws2, "Alertas");
+  XLSX.writeFile(wb, `alertas_infona_${stamp()}.xlsx`);
+}
+function exportPdf() {
+  if (!VIEW.length) return alert("No hay registros para los filtros seleccionados.");
+  const { jsPDF } = window.jspdf; const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
+  const a = VIEW.filter(r => r.atendido === "SI").length;
+  doc.setFillColor(58, 163, 10); doc.rect(0, 0, 297, 18, "F"); doc.setTextColor(255); doc.setFontSize(14);
+  doc.text("INFONA – Alertas de deforestación", 10, 11); doc.setFontSize(9); doc.text("Dirección General de Oficinas Regionales · " + new Date().toLocaleString("es-PY"), 10, 15.5);
+  doc.setTextColor(30); doc.setFontSize(9); doc.text("Filtros: " + filterText(), 10, 25);
+  doc.setFontSize(11);
+  [["Alertas", fmt(VIEW.length)], ["Atendidas", pc(a, VIEW.length)], ["Pendientes", fmt(VIEW.length - a)], ["Superficie reg. (ha)", fmt(VIEW.reduce((s, r) => s + r.superficie, 0))]]
+    .forEach(([l, v], i) => { const x = 10 + i * 70; doc.setDrawColor(47, 125, 31); doc.rect(x, 29, 64, 14); doc.setFontSize(13); doc.text(String(v), x + 4, 36.5); doc.setFontSize(8); doc.text(l, x + 4, 41); });
+  doc.autoTable({ startY: 48, head: [["Oficina regional", "Alertas", "Atendidas", "% atendidas"]], body: grp(VIEW, "oficina").map(([o, g]) => [o, g.n, g.a, pc(g.a, g.n)]), styles: { fontSize: 7.5, cellPadding: 1.2 }, headStyles: { fillColor: [47, 125, 31] }, tableWidth: 120, margin: { left: 10 } });
+  doc.addPage();
+  doc.autoTable({ startY: 12, head: [["Reporte", "Año", "Oficina", "Departamento", "Distrito", "Tipo", "Atendido", "Sup. (ha)", "Acta", "Remitido a"]], body: VIEW.map(r => [r.reporte, r.anio ?? "", r.oficina, r.dpto, r.distrito, r.tipo, r.atendido, r.superficie ? fmt(r.superficie) : "", r.acta, r.remitido]), styles: { fontSize: 7, cellPadding: 1 }, headStyles: { fillColor: [47, 125, 31] }, margin: { left: 8, right: 8 },
+    didDrawPage: d => { doc.setFontSize(7); doc.setTextColor(120); doc.text("INFONA – Documento de uso interno · Página " + doc.internal.getNumberOfPages(), 8, 205); } });
+  doc.save(`alertas_infona_${stamp()}.pdf`);
+}
+
+/* ---------- eventos ---------- */
+$("fOf").onchange = e => { S.of = e.target.value; apply(); };
+$("fDp").onchange = e => { S.dp = e.target.value; apply(); };
+$("fTi").onchange = e => { S.ti = e.target.value; apply(); };
+$("fAt").onchange = e => { S.at = e.target.value; apply(); };
+let qT; $("fQ").oninput = e => { clearTimeout(qT); qT = setTimeout(() => { S.q = e.target.value.trim(); apply(); }, 250); };
+$("bClr").onclick = () => { Object.assign(S, { y: null, of: "", dp: "", ti: "", at: "", q: "" }); $("fQ").value = ""; apply(); };
+$("pPrev").onclick = () => { if (page > 0) { page--; drawTable(); } };
+$("pNext").onclick = () => { if ((page + 1) * PAGE < VIEW.length) { page++; drawTable(); } };
+$("bXls").onclick = exportXlsx; $("bPdf").onclick = exportPdf;
+$("bRef").onclick = refresh;
+$("ovX").onclick = () => $("ov").style.display = "none";
+
+initMap();
+refresh();
+</script>
+</body>
+</html>
